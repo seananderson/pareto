@@ -1,0 +1,152 @@
+```{r knitr-options, cache=FALSE, echo=FALSE, eval=TRUE}
+library(knitr)
+opts_chunk$set(message=FALSE, warning=FALSE, cache=TRUE, autodep=TRUE)
+```
+
+```{r}
+dpareto <- function(x, xm, alpha)
+  ifelse(x > xm, alpha * xm^alpha / (x^(alpha+1)), 0)
+
+qpareto <- function(p, xm, alpha)
+  ifelse(p < 0 | p > 1, NaN, xm * (1 - p)^(-1 / alpha))
+
+rpareto <- function(n, xm, alpha)
+  qpareto(runif(n), xm, alpha)
+
+pareto_mle <- function(x) {
+  xm <- min(x)
+  alpha <- length(x) / (sum(log(x)) - length(x) * log(xm))
+  return(list(xm = xm, alpha = alpha))
+}
+```
+
+```{r results='markup',echo=FALSE,comment=""}
+cat(paste(readLines("pareto.stan"), collapse = "\n"))
+```
+
+```{r, results="hide"}
+set.seed(123)
+y <- rpareto(1e2, xm = 10.2, alpha = 3.8)
+hist(y)
+pareto_mle(y)
+
+library(rstan)
+sm <- stan_model("pareto.stan")
+sm2 <- stan_model("pareto2.stan")
+m <- sampling(sm, data = list(N = length(y), y = y))
+m2 <- sampling(sm2, data = list(N = length(y), y = y, ymin_upper = min(y) * 2))
+hist(extract(m2)$y_min)
+hist(extract(m2)$alpha)
+pairs(m2)
+```
+
+```{r}
+plot(density(y), xlim = c(10, 40), lty = 2)
+par(new = TRUE)
+x <- seq(min(y)+0.1, max(y), length.out = 200)
+plot(x, dpareto(x, min(y), 3.8), type = "l", xlim = c(10, 40))
+```
+
+```{r}
+print(m)
+rstan::traceplot(m, inc_warmup = FALSE)
+hist(extract(m)$alpha)
+rstan::traceplot(m2, inc_warmup = FALSE)
+```
+
+```{r, results="hide"}
+## real data
+source("load_dat.R")
+## fish.l
+# head(fish.l)
+# nrow(fish.l)
+set.seed(1) # downsample to experiment:
+d <- fish.l[sample(seq_len(nrow(fish.l)), 15000L), ]
+
+```{r}
+pareto_mle(d$pcbm)
+y <- d$pcbm
+m <- sampling(sm, data = list(N = length(y), y = y), iter = 1000)
+hist(extract(m)$alpha)
+```
+
+```{r, results="hide"}
+# try fitting to each
+library(dplyr)
+d <- d %>% group_by(Ecoregion) %>%
+  mutate(n_er = n()) %>%
+  filter(n_er >= 20) %>%
+  as.data.frame()
+d$Ecoregion <- as.factor(as.character(d$Ecoregion))
+n_er <- length(unique(d$Ecoregion))
+
+er_test_fits <- plyr::dlply(d, "Ecoregion", function(x) {
+  y <- x$pcbm
+  sampling(sm2, data = list(N = length(y), y = y, ymin_upper = min(y) * 2),
+    iter = 3000)
+})
+```
+
+```{r}
+out <- plyr::ldply(er_test_fits, function(x) {
+  q <- quantile(extract(x)$alpha, probs = c(0.05, 0.25, 0.5, 0.75, 0.95))
+  q <- as.data.frame(t(q))
+  q <- data.frame(q, rhat = max(summary(x)$summary[,"Rhat"]))
+  q
+})
+
+filter(out, rhat >= 1.1)
+out2 <- filter(out, rhat < 1.1)
+```
+
+```{r, fig.width=6, fig.height=9}
+library(ggplot2)
+p <- ggplot(out2, aes(X50., Ecoregion)) + geom_point() +
+  geom_segment(aes(xend = X5., x = X95.,
+      y = Ecoregion, yend = Ecoregion), lwd = 0.2) +
+  geom_segment(aes(xend = X25., x = X75.,
+      y = Ecoregion, yend = Ecoregion), lwd = 0.8) +
+  xlab(expression(alpha))
+print(p)
+ggsave("alphas.pdf", width = 6, height = 9)
+
+ggplot(out2, aes(X50.)) + geom_histogram()
+ggsave("alphas-median-hist.pdf", width = 6, height = 6)
+```
+ 
+
+```{r}
+# ranges <- d %>% group_by(Ecoregion) %>%
+#   summarise(min_ = min(pcbm), max_ = max(pcbm))
+# out2 <- inner_join(out2, ranges, by = "Ecoregion")
+```
+
+Look at fits to data:
+
+```{r}
+# P <- ecdf(sizes)
+# plot(sizes, 1-P(sizes)+0.01, log = "")
+cp <- function(x, xm, alpha) (xm / x) ^ alpha
+# lines(sort(sizes), cp(sort(sizes), xm = min(sizes), alpha = 2))
+
+out3 <- plyr::ddply(d, "Ecoregion", function(x) {
+  sizes <- sort(x$pcbm)
+  e <- extract(er_test_fits[[unique(x$Ecoregion)]])
+  alpha <- median(e$alpha)
+  ymin <- median(e$y_min)
+  coefs <- data.frame(alpha = e$alpha, ymin = e$y_min)
+  s <- apply(coefs, 1, function(y) {cp(sizes, xm = y["ymin"], 
+      alpha = y["alpha"])})
+  ci <- as.data.frame(t(apply(s, 1, quantile, probs = c(0.025, 0.5, 0.975))))
+  P <- ecdf(sizes)
+  o <- data.frame(sizes = sizes, cdf = 1 - P(sizes), 
+    l = ci[,1], fit = ci[,2], u = ci[,3])
+  o
+})
+```
+
+```{r, fig.height=10,fig.width=10}
+p <- ggplot(out3, aes(log(sizes), log(cdf+0.005))) + geom_point(cex = 0.8) + facet_wrap(~Ecoregion) + 
+  geom_ribbon(aes(ymax = log(u+0.005), ymin = log(l+0.005)), alpha = 0.5, fill = "red") + 
+  geom_line(aes(y = log(fit+0.005)), col = "red")
+```

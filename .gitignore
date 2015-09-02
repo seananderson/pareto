@@ -1,0 +1,11 @@
+.Rproj.user
+.Rhistory
+.RData
+.Rapp.history
+*.pdf
+*.rds
+*.html
+pareto_cache/
+pareto_files/
+*.rda
+*.Rdata

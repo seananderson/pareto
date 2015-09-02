@@ -45,6 +45,7 @@ med <- apply(a, 2, median)
 med2 <- apply(a2, 2, median)
 jit <- jitter(rep(0, n_groups), 0.3)
 
+pdf("heir-alphas-sim.pdf", width = 6, height = 6)
 par(mfrow = c(2, 2))
 
 plot(c(jit-0.5, jit+0.5), c(med2, med), xlim = c(-0.5, 0.6), log = "y")
@@ -62,3 +63,4 @@ plot(density(extract(m)$cv_alpha))
 abline(v = cv_alpha)
 plot(density(extract(m)$mu_alpha))
 abline(v = mu_alpha)
+dev.off()

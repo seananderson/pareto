@@ -3,19 +3,10 @@ library(rstan) # >= 2.7.0-1
 rstan::rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 library(ggplot2)
-dpareto <- function(x, xm, alpha)
-  ifelse(x > xm, alpha * xm^alpha / (x^(alpha+1)), 0)
-qpareto <- function(p, xm, alpha)
-  ifelse(p < 0 | p > 1, NaN, xm * (1 - p)^(-1 / alpha))
-rpareto <- function(n, xm, alpha)
-  qpareto(runif(n), xm, alpha)
 
-source("load_dat.R")
-## fish.l
-# head(fish.l)
-# nrow(fish.l)
+source("load_dat.R") # creates fish.l
 set.seed(1) # downsample to experiment:
-d <- fish.l[sample(seq_len(nrow(fish.l)), 50000), ]
+d <- fish.l[sample(seq_len(nrow(fish.l)), 50000), ] # downsample for speed for now
 xmins <- group_by(d, SiteCode) %>% summarise(xmin = min(pcbm), n = n()) %>%
   filter(n >= 5)
 xmins$site_index <- 1:nrow(xmins)
@@ -23,6 +14,7 @@ n_groups <- max(xmins$site_index)
 d <- inner_join(d, xmins)
 d <- d %>% arrange(site_index, pcbm)
 
+# by site:
 m <- stan("pareto-hier.stan", iter = 500,
   data = list(
     N = length(d$pcbm),
@@ -37,7 +29,7 @@ max(m_summ[, "Rhat"])
 min(m_summ[, "n_eff"])
 saveRDS(m, file = "m.rds")
 
-###########################
+# by ecoregion:
 xmins <- group_by(d, Ecoregion) %>% summarise(xmin = min(pcbm), n = n())
 d$xmin <- NULL
 d$n <- NULL
@@ -61,14 +53,15 @@ m2_summ <- summary(m2)$summary
 max(m2_summ[, "Rhat"])
 min(m2_summ[, "n_eff"])
 
-###########
+# look at posteriors:
 a <- extract(m)$alphas
 a2 <- extract(m2)$alphas
 med <- apply(a, 2, median)
 med2 <- apply(a2, 2, median)
 jit <- jitter(rep(0, n_groups), 0.3)
 
-par(mfrow = c(3, 2))
+pdf("hier-alphas.pdf", width = 7, height = 10)
+par(mfrow = c(4, 2))
 
 ord <- order(med)
 ci <- apply(a, 2, quantile, probs = c(0.1, 0.9))
@@ -91,5 +84,6 @@ d <- inner_join(d, q)
 d <- inner_join(d, q2)
 dd <- d[,c("med", "med2")]
 dd <- unique(dd)
-par(mfrow = c(1,1))
+
 plot(dd$med, dd$med2, col = "#00000030")
+dev.off()

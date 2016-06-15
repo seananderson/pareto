@@ -50,7 +50,6 @@ cv_site <- extract(m)$cv_alpha_site
 med <- apply(a, 2, median)
 med2 <- apply(a2, 2, median)
 
-
 # jit <- jitter(rep(0, n_groups), 0.3)
 plot(alphas2, med)
 plot(alphas, med2)
@@ -58,22 +57,22 @@ plot(alphas, med2)
 plot(alphas2);points(rep(alphas, each = n_groups2), pch = 3)
 points(med, col = "red")
 
-# pdf("heir-alphas-sim.pdf", width = 6, height = 6)
-par(mfrow = c(2, 2))
-
-plot(c(jit-0.5, jit+0.5), c(med2, med), xlim = c(-0.5, 0.6), log = "y")
-segments(jit-0.5, med2, jit+0.5, med)
-points(jit + 0.55, alphas, col = "red")
-
-ci <- apply(a, 2, quantile, probs = c(0.1, 0.9))
-
-plot(med, log = "y", ylab = "alpha", ylim = range(ci), pch = 4)
-segments(1:length(med), ci[1, ], 1:length(med), ci[2, ], col = "#00000030")
-points(1:length(med), alphas, col = "red", pch = 20)
-points(1:length(med2), med2, col = "blue", pch = 4)
-
-plot(density(extract(m)$cv_alpha))
-abline(v = cv_alpha)
-plot(density(extract(m)$mu_alpha))
-abline(v = mu_alpha)
-# dev.off()
+# # pdf("heir-alphas-sim.pdf", width = 6, height = 6)
+# par(mfrow = c(2, 2))
+#
+# plot(c(jit-0.5, jit+0.5), c(med2, med), xlim = c(-0.5, 0.6), log = "y")
+# segments(jit-0.5, med2, jit+0.5, med)
+# points(jit + 0.55, alphas, col = "red")
+#
+# ci <- apply(a, 2, quantile, probs = c(0.1, 0.9))
+#
+# plot(med, log = "y", ylab = "alpha", ylim = range(ci), pch = 4)
+# segments(1:length(med), ci[1, ], 1:length(med), ci[2, ], col = "#00000030")
+# points(1:length(med), alphas, col = "red", pch = 20)
+# points(1:length(med2), med2, col = "blue", pch = 4)
+#
+# plot(density(extract(m)$cv_alpha))
+# abline(v = cv_alpha)
+# plot(density(extract(m)$mu_alpha))
+# abline(v = mu_alpha)
+# # dev.off()

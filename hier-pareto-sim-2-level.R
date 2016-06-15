@@ -60,6 +60,9 @@ points(med, col = "red")
 hist(cv_eco);abline(v = cv_alpha, col = "red")
 hist(cv_site);abline(v = cv_alpha2, col = "red")
 
+plot(m, pars = c("cv_alpha_eco", "cv_alpha_site"), show_density = TRUE)
+traceplot(m, pars = c("cv_alpha_eco", "cv_alpha_site"))
+
 dev.off()
 
 # # pdf("heir-alphas-sim.pdf", width = 6, height = 6)

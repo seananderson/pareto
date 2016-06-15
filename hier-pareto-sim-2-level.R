@@ -11,14 +11,14 @@ rpareto <- function(n, xm, alpha)
   qpareto(runif(n), xm, alpha)
 
 ## hierarchical distribution on alphas
-set.seed(123)
-cv_alpha <- 0.08
-cv_alpha2 <- 0.04
-mu_alpha <- 0.8
-n_groups <- 30
+set.seed(1236)
+cv_alpha <- 0.15
+cv_alpha2 <- 0.07
+mu_alpha <- 1.0
+n_groups <- 10
 n_groups2 <- 10
-xmins <- runif(n_groups * n_groups2, 2, 20)
-N <- 40
+xmins <- runif(n_groups * n_groups2, 2, 15)
+N <- 50
 alphas <- rgamma(n_groups, shape = 1/cv_alpha^2, rate = 1/(mu_alpha * cv_alpha^2))
 alphas2 <- lapply(alphas, function(x)
   rgamma(n_groups2, shape = 1/cv_alpha2^2, rate = 1/(x * cv_alpha2^2))) %>%
@@ -31,7 +31,7 @@ d <- data.frame(d, site = rep(ei$site, each = N))
 # d$group <- rep(seq_len(n_groups), each = N)
 ggplot(d, aes(y)) + geom_histogram() + facet_wrap(~site)
 
-m <- stan("pareto-hier-2-level.stan", iter = 3000,
+m <- stan("pareto-hier-2-level.stan", iter = 1000,
   data = list(
     N = length(d$y),
     J = n_groups2 * n_groups,
@@ -51,11 +51,16 @@ med <- apply(a, 2, median)
 med2 <- apply(a2, 2, median)
 
 # jit <- jitter(rep(0, n_groups), 0.3)
+pdf("heir-2-level-sim.pdf")
 plot(alphas2, med)
 plot(alphas, med2)
 
 plot(alphas2);points(rep(alphas, each = n_groups2), pch = 3)
 points(med, col = "red")
+hist(cv_eco);abline(v = cv_alpha, col = "red")
+hist(cv_site);abline(v = cv_alpha2, col = "red")
+
+dev.off()
 
 # # pdf("heir-alphas-sim.pdf", width = 6, height = 6)
 # par(mfrow = c(2, 2))

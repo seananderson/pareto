@@ -21,11 +21,11 @@ model {
   vector[J] den;
 
   // priors:
-  cv_alpha_eco ~ cauchy(0, 2.5);
-  cv_alpha_site ~ cauchy(0, 2.5);
+  cv_alpha_eco ~ cauchy(0, 2);
+  cv_alpha_site ~ cauchy(0, 2);
   mu_alpha ~ cauchy(0, 5);
   alphas_site ~ cauchy(0, 10);
-  alphas_eco ~ cauchy(0, 5);
+  alphas_eco ~ cauchy(0, 10);
 
   // ecoregion level alphas:
   alphas_eco ~ gamma(1/cv_alpha_eco^2, 1/(mu_alpha * cv_alpha_eco^2));

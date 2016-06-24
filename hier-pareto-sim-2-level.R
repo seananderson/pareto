@@ -11,44 +11,131 @@ rpareto <- function(n, xm, alpha)
   qpareto(runif(n), xm, alpha)
 
 ## hierarchical distribution on alphas
-set.seed(1236)
-cv_alpha <- 0.15
-cv_alpha2 <- 0.07
-mu_alpha <- 1.0
-n_groups <- 10
-n_groups2 <- 10
-xmins <- runif(n_groups * n_groups2, 2, 15)
-N <- 50
-alphas <- rgamma(n_groups, shape = 1/cv_alpha^2, rate = 1/(mu_alpha * cv_alpha^2))
-alphas2 <- lapply(alphas, function(x)
-  rgamma(n_groups2, shape = 1/cv_alpha2^2, rate = 1/(x * cv_alpha2^2))) %>%
-  unlist()
-plot(alphas2);points(rep(alphas, each = n_groups2), pch = 3)
-ei <- data.frame(alphas2 = alphas2, site_index = 1:length(alphas2), eco_index = rep(1:n_groups, each = n_groups2))
-d <- data.frame(xm = rep(xmins, each = N), alpha = rep(alphas2, each = N), n = 1)
-d <- plyr::mdply(d, rpareto) %>% rename(y = V1)
-d <- data.frame(d, site = rep(ei$site, each = N))
-# d$group <- rep(seq_len(n_groups), each = N)
-ggplot(d, aes(y)) + geom_histogram() + facet_wrap(~site)
+simulation_test_pareto <- function(
+  cv_alpha = 0.45,
+  cv_alpha2 = 0.27,
+  mu_alpha = 1.0,
+  n_groups = 10,
+  n_groups2 = 7,
+  N = 40
+) {
+  xmins <- runif(n_groups * n_groups2, 2, 15)
+  # xmins <- runif(n_groups * n_groups2, 8, 8)
+  alphas_eco <- rgamma(n_groups, shape = 1/cv_alpha^2, 
+    rate = 1/(mu_alpha * cv_alpha^2))
+  alphas_site <- lapply(alphas_eco, function(x)
+    rgamma(n_groups2, shape = 1/cv_alpha2^2, rate = 1/(x * cv_alpha2^2))) %>%
+      unlist()
+    # plot(alphas_site);points(rep(alphas_eco, each = n_groups2), pch = 3)
+    ei <- data.frame(alphas_site = alphas_site, site_index = 1:length(alphas_site),
+      eco_index = rep(1:n_groups, each = n_groups2))
+    d <- data.frame(xm = rep(xmins, each = N), alpha = rep(alphas_site, each = N),
+      n = 1)
+    d <- plyr::mdply(d, rpareto) %>% rename(y = V1)
+    d <- data.frame(d, site = rep(ei$site, each = N))
+    # ggplot(d, aes(y)) + geom_histogram() + facet_wrap(~site)
 
-m <- stan("pareto-hier-2-level.stan", iter = 1000,
+
+#    browser()
+    m <- stan("pareto-hier-2-level.stan", iter = 2000, chains = 4,
+      data = list(
+        N = length(d$y),
+        J = n_groups2 * n_groups,
+        K = n_groups,
+        site_index = d$site,
+        eco_index = ei$eco_index,
+        y = d$y,
+        y_mins = xmins
+        ))
+    a <- extract(m)$alphas_site
+    a2 <- extract(m)$alphas_eco
+    cv_eco <- extract(m)$cv_alpha_eco %>% median()
+    cv_site <- extract(m)$cv_alpha_site %>% median()
+    # xmin <- extract(m)$xmin %>% median()
+
+    med <- apply(a, 2, median)
+    med2 <- apply(a2, 2, median)
+
+    max_rhat <- max(summary(m)$summary[, "Rhat"])
+    min_neff <- min(summary(m)$summary[, "n_eff"])
+
+    list(a_site = alphas_site, a_eco = alphas_eco, a_site_hat = med, a_eco_hat = med2,
+      scalars = data.frame(cv_site = cv_alpha2, cv_eco = cv_alpha, 
+      cv_site_hat = cv_site, cv_eco_hat = cv_eco, #xmin = min(xmins), xmin_hat = xmin,
+      max_rhat = max_rhat, min_neff = min_neff))
+
+}
+
+set.seed(123)
+output <- list()
+for (i in 1:1)   {
+  output[[i]] <- simulation_test_pareto()
+  output[[i]]$rep <- i
+}
+
+a_site_sim <- plyr::ldply(output, function(x) {
+  data.frame(rep = x$rep, a_site = x$a_site, a_site_hat = x$a_site_hat)})
+a_eco_sim <- plyr::ldply(output, function(x) {
+  data.frame(rep = x$rep, a_eco = x$a_eco, a_eco_hat = x$a_eco_hat)})
+scalars_sim <- plyr::ldply(output, function(x) {
+  data.frame(rep = x$rep, x$scalars)})
+
+ggplot(a_site_sim, aes(a_site, a_site_hat)) + geom_point() + facet_wrap(~rep) +
+ geom_abline(intercept = 0, slope = 1)
+
+ggplot(a_eco_sim, aes(a_eco, a_eco_hat)) + geom_point() + facet_wrap(~rep) +
+ geom_abline(intercept = 0, slope = 1)
+
+scalars_sim
+x <- seq(0, 25, length.out = 100)
+plot(x, dnorm(x, 0, 2), type = "l", ylim = c(0, 0.26))
+lines(x, dcauchy(x, 0, 5), lty = 2)
+
+plot(scalars_sim$cv_site_hat);abline(h = scalars_sim$cv_site, col = "red")
+plot(scalars_sim$cv_eco_hat);abline(h = scalars_sim$cv_eco, col = "red")
+plot(scalars_sim$cv_eco_hat);abline(h = scalars_sim$cv_eco, col = "red")
+
+source("load_dat.R")
+## fish.l
+# head(fish.l)
+# nrow(fish.l)
+set.seed(1) # downsample to experiment:
+ids <- as.character(unique(fish.l$Ecoregion))[1:12]
+d <- fish.l[fish.l$Ecoregion %in% ids, ]
+ids <- as.character(unique(d$SiteCode))[1:100]
+d <- d[d$SiteCode %in% ids, ]
+nrow(fish.l)
+nrow(d)
+ec <- select(d, Ecoregion)  %>% unique()  %>% mutate(eco_id = 1:n())
+si <- select(d, SiteCode)  %>% unique()  %>% mutate(site_id = 1:n())
+d <- inner_join(d, ec) %>% inner_join(si)
+xm <- d %>% group_by(site_id)  %>% 
+  summarize(xmin = min(pcbm))
+ec2 <- select(d, site_id, eco_id) %>% unique()
+
+m <- stan("pareto-hier-2-level.stan", iter = 500, chains = 4,
   data = list(
-    N = length(d$y),
-    J = n_groups2 * n_groups,
-    K = n_groups,
-    site_index = d$site,
-    eco_index = ei$eco_index,
-    y = d$y,
-    y_mins = xmins
-    ))
+    N = length(d$pcbm),
+    J = max(d$site_id),
+    K = max(d$eco_id),
+    site_index = d$site_id,
+    eco_index = ec2$eco_id,
+    y = d$pcbm,
+    y_mins = xm$xmin))
+b <- broom::tidy(m, estimate.method = "median", rhat = TRUE, ess = TRUE)
+# plot(scalars_sim$cv_site_hat);abline(h = scalars_sim$cv_site, col = "red")
+# plot(scalars_sim$xmin_hat);abline(h = scalars_sim$xmin, col = "red")
+# scalars_sim <- scalars_sim %>% mutate(proportional_error = gcc0)
+# Probably best to fix the minimum value 
+# Models are very sensitive to this value being wrong 
+# The data is estimated almost exactly as being the minimum observed value always 
+# Can be very bad if this minimum parameter isn't allowed to get big enough 
+# And very bad computationally if you don't limit the parameter to the minimum observed 
 
-a <- extract(m)$alphas_site
-a2 <- extract(m)$alphas_eco
-cv_eco <- extract(m)$cv_alpha_eco
-cv_site <- extract(m)$cv_alpha_site
 
-med <- apply(a, 2, median)
-med2 <- apply(a2, 2, median)
+
+
+
 
 # jit <- jitter(rep(0, n_groups), 0.3)
 pdf("heir-2-level-sim.pdf")
